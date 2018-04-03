@@ -11,8 +11,8 @@ START_TOKEN = 1
 
 
 class AttentionQA(object):
-    def __init__(self, n_pointers=1, batch_size=150, seq_length=45, q_length = 5, learning_rate=0.0001,
-                 cell=tf.contrib.rnn.GRUCell, n_layers=3, n_units=75, drop_out = 0.2):
+    def __init__(self, n_pointers=1, batch_size=100, seq_length=45, q_length = 5, learning_rate=0.0001,
+                 cell=tf.contrib.rnn.GRUCell, n_layers=3, n_units=50, drop_out = 0.3):
         """Creates TensorFlow graph of a pointer network.
 
         Args:

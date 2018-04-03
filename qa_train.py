@@ -83,6 +83,6 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
     parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
     parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for Adam optimizer.')
+    parser.add_argument('--learning_rate', type=float, default=0.0015, help='Learning rate for Adam optimizer.')
     args = parser.parse_args(sys.argv[1:])
     train(args)
