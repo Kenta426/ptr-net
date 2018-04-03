@@ -1,0 +1,18 @@
+Model:
+QA word level alignment : attention layer over word embedding of question and passage
+QA higher level alignment : attention layer over bi-directional rnn embedding of
+question and passage (even though the visualization suggests it didn't learn anything)
+input to the pointer net is tf.concat of word level alignment and higher level alignment
+
+n_layer = 3
+n_units = 50
+drop_out = 0.3
+
+Learning rate = 0.0015
+batch size = 100
+
+80 % after 50 epoch
+95 % after 80 epoch
+98 % after 100 epoch
+
+TODO: restore the model, train with lower learning rate
