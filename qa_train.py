@@ -8,6 +8,7 @@ import tensorflow as tf
 import sys
 from data import QALoader
 from qa_model import AttentionQA
+from model import PointerNet
 from tqdm import tqdm
 
 
@@ -32,14 +33,14 @@ def train(args):
         sess.run(init)
         for ep in tqdm(range(args.n_epochs)):
             tr_loss, tr_acc = 0, 0
-            for itr in range(training.n_batches):
+            for itr in tqdm(range(training.n_batches)):
                 x_batch, x_lengths, q_batch, q_length, y_batch = training.next_batch()
                 train_dict = {qa_net.encoder_inputs: x_batch,
                               qa_net.input_lengths: x_lengths,
                               qa_net.question_inputs: q_batch,
                               qa_net.question_lengths: q_length,
                               qa_net.pointer_labels: y_batch}
-                loss, acc, _ = sess.run([qa_net.loss, qa_net.exact_match, qa_net.train_step], feed_dict=train_dict)
+                align, loss, acc, _ = sess.run([qa_net.qa_alignment, qa_net.loss, qa_net.exact_match, qa_net.train_step], feed_dict=train_dict)
                 tr_loss += loss
                 tr_acc += acc
 
@@ -63,23 +64,24 @@ def train(args):
                 print('Train EM: {:.2f}, Validation EM: {:.2f}'.format(tr_acc / training.n_batches, val_acc))
 
                 # save model
-                if val_acc >= best_val_acc:
+                if val_acc > best_val_acc:
                     print('Validation accuracy increased. Saving model.')
                     saver.save(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
                     best_val_acc = val_acc
                 else:
                     print('Validation accuracy decreased. Restoring model.')
                     saver.restore(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
+                    training.shuffle_batch()
 
         print('Training complete.')
-        print('Best Validation EM: {:.2f}".format(best_val_acc)')
+        print('Best Validation EM: {:.2f}'.format(best_val_acc))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./data', help='Directory in which data is stored.')
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
-    parser.add_argument('--n_epochs', type=int, default=100, help='Number of epochs to run.')
+    parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
     parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for Adam optimizer.')
     args = parser.parse_args(sys.argv[1:])

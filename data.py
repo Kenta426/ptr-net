@@ -246,20 +246,27 @@ class QALoader(object):
 
     def create_batches(self):
         """Split data into training batches."""
+        idx = np.random.permutation(len(self.embedding))
+        self.embedding = self.embedding[idx]
+        self.q_embedding = self.q_embedding[idx]
+        self.lengths = self.lengths[idx]
+        self.qlengths = self.qlengths[idx]
+        self.labels = self.labels[idx]
+
         self.n_batches = int(self.embedding.shape[0] / self.batch_size)
         # truncate training data so it is equally divisible into batches
-        self.embedding = self.embedding[:self.n_batches * self.batch_size, :]
-        self.q_embedding = self.q_embedding[:self.n_batches * self.batch_size, :]
-        self.lengths = self.lengths[:self.n_batches * self.batch_size]
-        self.qlengths = self.qlengths[:self.n_batches * self.batch_size]
-        self.labels = self.labels[:self.n_batches * self.batch_size, :]
+        self.x_batches = self.embedding[:self.n_batches * self.batch_size, :]
+        self.q_batches = self.q_embedding[:self.n_batches * self.batch_size, :]
+        self.x_lengths = self.lengths[:self.n_batches * self.batch_size]
+        self.q_lengths = self.qlengths[:self.n_batches * self.batch_size]
+        self.y_batches = self.labels[:self.n_batches * self.batch_size, :]
 
         # split training data into equal sized batches
-        self.x_batches = np.split(self.embedding, self.n_batches, 0)
-        self.x_lengths = np.split(self.lengths, self.n_batches)
-        self.q_batches = np.split(self.q_embedding, self.n_batches, 0)
-        self.q_lengths = np.split(self.qlengths, self.n_batches)
-        self.y_batches = np.split(self.labels, self.n_batches, 0)
+        self.x_batches = np.split(self.x_batches, self.n_batches, 0)
+        self.x_lengths = np.split(self.x_lengths, self.n_batches)
+        self.q_batches = np.split(self.q_batches, self.n_batches, 0)
+        self.q_lengths = np.split(self.q_lengths, self.n_batches)
+        self.y_batches = np.split(self.y_batches, self.n_batches, 0)
 
     def next_batch(self):
         """Return current batch, increment pointer by 1 (modulo n_batches)"""
