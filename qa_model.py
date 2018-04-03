@@ -148,7 +148,8 @@ class AttentionQA(object):
         #     self.qq_alignment = tf.transpose(self.qq_state.alignment_history.stack(), [1,0,2])
 
         with tf.variable_scope('encoder'):
-            ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output], axis = 2)
+            # ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output], axis = 2)
+            ptr_input = self.qa_outputs.rnn_output
             if n_layers > 1:
                 enc_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units) for _ in range(n_layers)])
             else:
