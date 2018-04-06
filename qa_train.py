@@ -33,6 +33,7 @@ def train(args):
     with tf.Session() as sess:
         sess.run(init)
         # saver.restore(sess, os.path.join(args.save_dir, '201804030240','ptr_net.ckpt'))
+        # saver.restore(sess, os.path.join(args.save_dir, '201804060454', 'ptr_net.ckpt'))
         # print('restored 98% model')
         for ep in tqdm(range(args.n_epochs)):
             tr_loss, tr_acc = 0, 0
@@ -62,9 +63,8 @@ def train(args):
                                 qa_net.pointer_labels: y_batch}
                     val_acc += sess.run(qa_net.exact_match, feed_dict=val_dict)
                 val_acc = val_acc / validation.n_batches
-
-                print('epoch {:3d}, loss={:.2f}'.format(ep, tr_loss / training.n_batches))
-                print('Train EM: {:.2f}, Validation EM: {:.2f}'.format(tr_acc / training.n_batches, val_acc))
+                print('epoch {:3d}, loss={:.3f}'.format(ep, tr_loss / training.n_batches))
+                print('Train EM: {:.3f}, Validation EM: {:.3f}'.format(tr_acc / training.n_batches, val_acc))
                 # training.shuffle_batch()
                 # save model
                 if val_acc > best_val_acc:
@@ -86,6 +86,6 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
     parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
     parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for Adam optimizer.')
+    parser.add_argument('--learning_rate', type=float, default=0.0005, help='Learning rate for Adam optimizer.')
     args = parser.parse_args(sys.argv[1:])
     train(args)
