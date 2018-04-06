@@ -22,6 +22,7 @@ def train(args):
     qa_net = AttentionQA(batch_size=args.batch_size, learning_rate=args.learning_rate)
     saver = tf.train.Saver()
     best_val_acc = 0
+    best_loss = 100
 
     # record training loss & accuracy
     train_losses = []
@@ -73,7 +74,7 @@ def train(args):
                 else:
                     print('Validation accuracy decreased. Restoring model.')
                     saver.restore(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
-                    # training.shuffle_batch()
+                    training.shuffle_batch()
 
         print('Training complete.')
         print('Best Validation EM: {:.2f}'.format(best_val_acc))
@@ -84,7 +85,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./data', help='Directory in which data is stored.')
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
     parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
-    parser.add_argument('--batch_size', type=int, default=30, help='Batch size.')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for Adam optimizer.')
+    parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
+    parser.add_argument('--learning_rate', type=float, default=0.0005, help='Learning rate for Adam optimizer.')
     args = parser.parse_args(sys.argv[1:])
     train(args)
