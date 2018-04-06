@@ -252,7 +252,7 @@ class QALoader(object):
         self.lengths = self.lengths[idx]
         self.qlengths = self.qlengths[idx]
         self.labels = self.labels[idx]
-
+        print("Shuffled batch")
         self.create_batches()
 
     def create_batches(self):
@@ -298,7 +298,7 @@ if __name__ == '__main__':
     vocab = set()
     with open(os.path.join(args.data_path, 'train.txt'), 'a') as file:
         for _ in range(args.n_passages):
-            n_sentences = np.random.randint(1, 5)
+            n_sentences = np.random.randint(3, 5)
             passage, question, idx = generate_passage_question(n_sentences)
             file.write('{} {} || {}\n'.format(idx, question, passage))
             vocab = vocab.union(set(tokenize(passage)))
@@ -306,7 +306,7 @@ if __name__ == '__main__':
 
     with open(os.path.join(args.data_path, 'validate.txt'), 'a') as file:
         for _ in range(int(args.n_passages/5)):
-            n_sentences = np.random.randint(1, 5)
+            n_sentences = np.random.randint(3, 5)
             passage, question, idx = generate_passage_question(n_sentences)
             file.write('{} {} || {}\n'.format(idx, question, passage))
             vocab = vocab.union(set(tokenize(passage)))
@@ -314,7 +314,7 @@ if __name__ == '__main__':
 
     with open(os.path.join(args.data_path, 'test.txt'), 'a') as file:
         for _ in range(int(args.n_passages/5)):
-            n_sentences = np.random.randint(1, 5)
+            n_sentences = np.random.randint(3, 5)
             passage, question, idx = generate_passage_question(n_sentences)
             file.write('{} {} || {}\n'.format(idx, question, passage))
             vocab = vocab.union(set(tokenize(passage)))
