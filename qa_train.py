@@ -15,8 +15,8 @@ from tqdm import tqdm
 def train(args):
     # load data
     vocab_path = os.path.join(args.data_dir, 'vocab.json')
-    training = QALoader(os.path.join(args.data_dir, 'train.txt'), vocab_path, args.batch_size, 45, 5)
-    validation = QALoader(os.path.join(args.data_dir, 'validate.txt'), vocab_path, args.batch_size, 45, 5)
+    training = QALoader(os.path.join(args.data_dir, 'train.txt'), vocab_path, args.batch_size, 45, 6)
+    validation = QALoader(os.path.join(args.data_dir, 'validate.txt'), vocab_path, args.batch_size, 45, 6)
 
     # create TensorFlow graph
     qa_net = AttentionQA(batch_size=args.batch_size, learning_rate=args.learning_rate)
@@ -31,6 +31,8 @@ def train(args):
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
+        # saver.restore(sess, os.path.join(args.save_dir, '201804030240','ptr_net.ckpt'))
+        # print('restored 98% model')
         for ep in tqdm(range(args.n_epochs)):
             tr_loss, tr_acc = 0, 0
             for itr in tqdm(range(training.n_batches)):
@@ -62,7 +64,7 @@ def train(args):
 
                 print('epoch {:3d}, loss={:.2f}'.format(ep, tr_loss / training.n_batches))
                 print('Train EM: {:.2f}, Validation EM: {:.2f}'.format(tr_acc / training.n_batches, val_acc))
-
+                # training.shuffle_batch()
                 # save model
                 if val_acc > best_val_acc:
                     print('Validation accuracy increased. Saving model.')
@@ -71,7 +73,7 @@ def train(args):
                 else:
                     print('Validation accuracy decreased. Restoring model.')
                     saver.restore(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
-                    training.shuffle_batch()
+                    # training.shuffle_batch()
 
         print('Training complete.')
         print('Best Validation EM: {:.2f}'.format(best_val_acc))
@@ -82,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./data', help='Directory in which data is stored.')
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
     parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
-    parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
-    parser.add_argument('--learning_rate', type=float, default=0.0015, help='Learning rate for Adam optimizer.')
+    parser.add_argument('--batch_size', type=int, default=30, help='Batch size.')
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate for Adam optimizer.')
     args = parser.parse_args(sys.argv[1:])
     train(args)

@@ -11,8 +11,8 @@ START_TOKEN = 1
 
 
 class AttentionQA(object):
-    def __init__(self, n_pointers=1, batch_size=100, seq_length=45, q_length = 5, learning_rate=0.0001,
-                 cell=tf.contrib.rnn.GRUCell, n_layers=3, n_units=50, drop_out = 0.3):
+    def __init__(self, n_pointers=1, batch_size=100, seq_length=45, q_length = 6, learning_rate=0.0015,
+                 cell=tf.contrib.rnn.GRUCell, n_layers=3, n_units=50, drop_out = 0.1):
         """Creates TensorFlow graph of a pointer network.
 
         Args:
@@ -23,6 +23,7 @@ class AttentionQA(object):
             cell (method):         Method to create single RNN cell.
             n_layers (int):        Number of layers in RNN (assumed to be the same for encoder & decoder).
             n_units (int):         Number of units in RNN cell (assumed to be the same for all cells).
+            drop_out = (float):    Drop out rate for RNN cell (common values for now)
         """
 
         with tf.variable_scope('inputs'):
@@ -31,7 +32,6 @@ class AttentionQA(object):
             # actual non-padded length of each input passages; used for dynamic unrolling
             # (e.g. ['She went home', 'She went to the station'] -> [3, 5])
             self.input_lengths = tf.placeholder(tf.int32, [batch_size])
-
             # integer-encoded input question (e.g. 'Where is she ?' -> [5, 6, 7, 8])
             self.question_inputs = tf.placeholder(tf.int32, [batch_size, q_length])
             # actual non-padded length of each input question; used for dynamic unrolling
@@ -53,12 +53,16 @@ class AttentionQA(object):
         with tf.variable_scope('embeddings'):
             # load pre-trained GloVe embeddings
             word_matrix = tf.constant(np.load('./data/word_matrix.npy'), dtype=tf.float32)
-            self.word_matrix = tf.Variable(word_matrix, trainable=True, name='word_matrix')
+            self.word_matrix = tf.Variable(word_matrix, trainable=False, name='word_matrix')
             # lookup embeddings of inputs & decoder inputs
+            # embedding for the sentence, "he went to xx, she went to xx ..."
             self.input_embeds = tf.nn.embedding_lookup(self.word_matrix, self.encoder_inputs)
+            # embedding for the question, "Where is xx ?"
             self.question_embeds = tf.nn.embedding_lookup(self.word_matrix, self.question_inputs)
+            # embedding for the start token and the answer
             self.output_embeds = tf.nn.embedding_lookup(self.word_matrix, self.decoder_inputs)
 
+        # run bi-directional rnn to "contexualize" input questions
         with tf.variable_scope('q_contexualize'):
             if n_layers > 1:
                 q_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
@@ -68,9 +72,12 @@ class AttentionQA(object):
                 q_cell_f = tf.contrib.rnn.DropoutWrapper(q_cell_f, output_keep_prob=1.0-drop_out)
                 q_cell_b = cell(n_units)
                 q_cell_b = tf.contrib.rnn.DropoutWrapper(q_cell_b, output_keep_prob=1.0-drop_out)
-            q_contex, states = tf.nn.bidirectional_dynamic_rnn(q_cell_f,q_cell_b,self.question_embeds, self.question_lengths, dtype=tf.float32)
+            q_contex, self.q_states = tf.nn.bidirectional_dynamic_rnn(q_cell_f,q_cell_b, self.question_embeds,
+                                                    sequence_length=self.question_lengths, dtype=tf.float32)
+            # concatenate the output from both direction and store the question context
             self.q_contex = tf.concat(q_contex, axis=2)
 
+        # run bi-directional rnn to "contexualize" input paragraphs
         with tf.variable_scope('p_contexualize'):
             if n_layers > 1:
                 p_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
@@ -80,12 +87,16 @@ class AttentionQA(object):
                 p_cell_f = tf.contrib.rnn.DropoutWrapper(p_cell_f, output_keep_prob=1.0-drop_out)
                 p_cell_b = cell(n_units)
                 p_cell_b = tf.contrib.rnn.DropoutWrapper(p_cell_b, output_keep_prob=1.0-drop_out)
+            # conditional encoding by feeding the last state of question encoding
+            # p_contex, states = tf.nn.bidirectional_dynamic_rnn(p_cell_f, p_cell_b, self.input_embeds, self.input_lengths,
+            # initial_state_fw=self.q_states[0],initial_state_bw=self.q_states[1],dtype=tf.float32)
             p_contex, states = tf.nn.bidirectional_dynamic_rnn(p_cell_f, p_cell_b, self.input_embeds, self.input_lengths, dtype=tf.float32)
             self.p_contex = tf.concat(p_contex, axis=2)
 
+        # using attention mechanism to align word-level questions and word-level passages
         with tf.variable_scope('qa_alignment'):
-            # create a soft-alignment of passage context given question
-            attention = tf.contrib.seq2seq.BahdanauAttention(n_units, self.question_embeds,
+            # using LuongAttention over glove embedded questions (fewer parameters to train)
+            attention = tf.contrib.seq2seq.LuongAttention(n_units, self.question_embeds,
             memory_sequence_length=self.question_lengths,dtype=tf.float32)
             # create an RNN over passage
             if n_layers > 1:
@@ -97,16 +108,18 @@ class AttentionQA(object):
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(qa_cell, attention, alignment_history=True)
             # define the initial state
             attention_state = attention_cell.zero_state(batch_size, dtype=tf.float32)
-
+            # read passage again while attending over the question
             helper = tf.contrib.seq2seq.TrainingHelper(inputs=self.input_embeds, sequence_length=self.input_lengths)
             decoder = tf.contrib.seq2seq.BasicDecoder(attention_cell, helper, attention_state)
+            # output of the decoder is a new representation of input sentence with attention over the question
             self.qa_outputs, self.qa_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=seq_length)
-
+            # qa_alignment has a shape of BATCH x input length x question length (heatmap of attention value)
             self.qa_alignment = tf.transpose(self.qa_state.alignment_history.stack(), [1,0,2])
 
+
         with tf.variable_scope('higher_qa_alignment'):
-            # create a soft-alignment of passage context given question
-            attention = tf.contrib.seq2seq.BahdanauAttention(n_units, self.q_contex,
+            # create a soft-alignment of passage context given context of questions (higher-level)
+            attention = tf.contrib.seq2seq.LuongAttention(n_units, self.q_contex,
             memory_sequence_length=self.question_lengths,dtype=tf.float32)
             # create an RNN over passage
             if n_layers > 1:
@@ -118,38 +131,42 @@ class AttentionQA(object):
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(hqa_cell, attention, alignment_history=True)
             # define the initial state
             attention_state = attention_cell.zero_state(batch_size, dtype=tf.float32)
-
+            # read passage again while attending over the higher-level representation of questions
             helper = tf.contrib.seq2seq.TrainingHelper(inputs=self.input_embeds, sequence_length=self.input_lengths)
             decoder = tf.contrib.seq2seq.BasicDecoder(attention_cell, helper, attention_state)
+            # output of the decoder is a new representation of input sentences with attention over questions
             self.hqa_output, self.hqa_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=seq_length)
-
+            # qa_alignment has a shape of BATCH x input length x question length (heatmap of attention value)
             self.hqa_alignment = tf.transpose(self.hqa_state.alignment_history.stack(), [1,0,2])
 
-        # with tf.variable_scope('qq_alighment'):
-        #     # attend over both original and qa aligned passage
-        #     qq_input = tf.concat([self.input_embeds, self.qa_outputs.rnn_output], axis = 1)
-        #     attention = tf.contrib.seq2seq.BahdanauAttention(n_units, qq_input,
-        #     memory_sequence_length=self.question_lengths,dtype=tf.float32)
-        #     # # create an RNN over passage
-        #     if n_layers > 1:
-        #         qq_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
-        #     else:
-        #         qq_cell = cell(n_units)
-        #         qq_cell = tf.contrib.rnn.DropoutWrapper(qq_cell, output_keep_prob=1.0-drop_out)
-        #     # for each input to the next RNN cell, wire the attention mechanism
-        #     attention_cell = tf.contrib.seq2seq.AttentionWrapper(qq_cell, attention, alignment_history=True)
-        #     # define the initial state
-        #     attention_state = attention_cell.zero_state(batch_size, dtype=tf.float32)
-        #
-        #     helper = tf.contrib.seq2seq.TrainingHelper(inputs=qq_input, sequence_length=self.input_lengths)
-        #     decoder = tf.contrib.seq2seq.BasicDecoder(attention_cell, helper, attention_state)
-        #     self.qq_outputs, self.qq_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=seq_length)
-        #
-        #     self.qq_alignment = tf.transpose(self.qq_state.alignment_history.stack(), [1,0,2])
+        with tf.variable_scope('qq_alighment'):
+            # create a soft-alignment of passage given the question-aware context of passage itself
+            qq_input = tf.concat([self.input_embeds, self.qa_outputs.rnn_output], axis = 1)
+            # use LuongAttention over glove embedded passages and question-aware passages
+            attention = tf.contrib.seq2seq.LuongAttention(n_units, qq_input,
+            memory_sequence_length=self.input_lengths,dtype=tf.float32)
+            # # create an RNN over passage
+            if n_layers > 1:
+                qq_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+            else:
+                qq_cell = cell(n_units)
+                qq_cell = tf.contrib.rnn.DropoutWrapper(qq_cell, output_keep_prob=1.0-drop_out)
+            # for each input to the next RNN cell, wire the attention mechanism
+            attention_cell = tf.contrib.seq2seq.AttentionWrapper(qq_cell, attention, alignment_history=True)
+            # define the initial state
+            attention_state = attention_cell.zero_state(batch_size, dtype=tf.float32)
+            # read passage again while attending over itself
+            helper = tf.contrib.seq2seq.TrainingHelper(inputs=qq_input, sequence_length=self.input_lengths)
+            decoder = tf.contrib.seq2seq.BasicDecoder(attention_cell, helper, attention_state)
+            # output of the decoder is a new representation of input sentences with attention over questions
+            self.qq_outputs, self.qq_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=seq_length)
+            # qq_alignment has a shape of BATCH x input length x input length (heatmap of attention value)
+            self.qq_alignment = tf.transpose(self.qq_state.alignment_history.stack(), [1,0,2])
 
+        # pointer net
         with tf.variable_scope('encoder'):
-            # ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output], axis = 2)
-            ptr_input = self.qa_outputs.rnn_output
+            ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output], axis = 2)
+            # ptr_input = self.qa_outputs.rnn_output
             if n_layers > 1:
                 enc_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units) for _ in range(n_layers)])
             else:
@@ -196,3 +213,4 @@ class AttentionQA(object):
 
 if __name__ == '__main__':
     m = AttentionQA()
+    vocab_path = os.path.join('./data', 'vocab.json')

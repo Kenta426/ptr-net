@@ -16,7 +16,7 @@ dest = {'': ['home', 'nowhere'],
         'to the': ['stadium', 'station', 'hospital', 'classroom', 'kitchen', 'morgue']}
 advb = ['slowly', 'quickly', 'suddenly', 'reluctantly', 'happily']
 when = ['ten minutes ago', 'five minutes ago', 'yesterday', 'earlier']
-subj = ['she', 'he']
+subj = ['a teacher', 'a football player', 'a cat', 'a dog', 'a student']
 
 
 def tokenize(text):
@@ -210,7 +210,7 @@ class QALoader(object):
         self.qlengths = None
         self.labels = None
 
-        self.n_batches = None
+
         self.x_batches, self.x_lengths, self.y_batches = None, None, None
         self.pointer = 0
 
@@ -243,6 +243,7 @@ class QALoader(object):
             tokens = tokenize(sample)
             self.qlengths[i] = len(tokens)
             self.q_embedding[i] = list(map(self.vocab.get, tokens)) + [0] * (self.q_length - len(tokens))
+        self.n_batches = int(self.embedding.shape[0] / self.batch_size)
 
     def shuffle_batch(self):
         idx = np.random.permutation(len(self.embedding))
@@ -256,7 +257,6 @@ class QALoader(object):
 
     def create_batches(self):
         """Split data into training batches."""
-        self.n_batches = int(self.embedding.shape[0] / self.batch_size)
         # truncate training data so it is equally divisible into batches
         self.x_batches = self.embedding[:self.n_batches * self.batch_size, :]
         self.q_batches = self.q_embedding[:self.n_batches * self.batch_size, :]
