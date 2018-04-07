@@ -202,10 +202,11 @@ class AttentionQA(object):
             # ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output, self.qq_outputs.rnn_output], axis = 2)
             ptr_input = tf.concat([self.qa_outputs.rnn_output, self.hqa_output.rnn_output, self.pp_outputs.rnn_output], axis = 2)
             if n_layers > 1:
-                enc_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units) for _ in range(n_layers)])
+                enc_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units, activation=activatio) for _ in range(n_layers)])
             else:
-                enc_cell = cell(n_units)
+                enc_cell = cell(n_units, activation=activatio)
             self.encoder_outputs, _ = tf.nn.dynamic_rnn(enc_cell, ptr_input, self.input_lengths, dtype=tf.float32)
+            tf.summary.histogram('pointer', self.encoder_outputs)
 
         with tf.variable_scope('attention'):
             attention = tf.contrib.seq2seq.BahdanauAttention(n_units, self.encoder_outputs,
@@ -217,13 +218,14 @@ class AttentionQA(object):
             else:
                 helper = tf.contrib.seq2seq.TrainingHelper(inputs=self.output_embeds, sequence_length=self.output_lengths)
             if n_layers > 1:
-                dec_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units) for _ in range(n_layers)])
+                dec_cell = tf.contrib.rnn.MultiRNNCell([cell(n_units, activation=activatio) for _ in range(n_layers)])
             else:
-                dec_cell = cell(n_units)
+                dec_cell = cell(n_units, activation=activatio)
             attn_cell = tf.contrib.seq2seq.AttentionWrapper(dec_cell, attention, alignment_history=True)
             out_cell = tf.contrib.rnn.OutputProjectionWrapper(attn_cell, word_matrix.shape[0]-2)
             decoder = tf.contrib.seq2seq.BasicDecoder(out_cell, helper, out_cell.zero_state(batch_size, tf.float32))
             self.decoder_outputs, dec_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=n_pointers, impute_finished=True)
+            tf.summary.histogram('pointer', self.decoder_outputs.rnn_output)
 
         with tf.variable_scope('pointers'):
             # tensor of shape (# pointers, batch size, max. input sequence length)
