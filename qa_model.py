@@ -12,7 +12,7 @@ START_TOKEN = 1
 
 class AttentionQA(object):
     def __init__(self, n_pointers=1, batch_size=100, seq_length=45, q_length = 6, learning_rate=0.0015,
-                 cell=tf.contrib.rnn.GRUCell, n_layers=1, n_units=100, drop_out = 0.3, is_training=True):
+                 cell=tf.contrib.rnn.GRUCell, activation = tf.nn.elu, n_layers=1, n_units=100, drop_out = 0.3, is_training=True):
         """Creates TensorFlow graph of a pointer network.
 
         Args:
@@ -21,6 +21,7 @@ class AttentionQA(object):
             seq_length (int):      Maximum sequence length of inputs to encoder.
             learning_rate (float): Learning rate for Adam optimizer.
             cell (method):         Method to create single RNN cell.
+            activation (method):   Activation method attached to each RNN cell
             n_layers (int):        Number of layers in RNN (assumed to be the same for encoder & decoder).
             n_units (int):         Number of units in RNN cell (assumed to be the same for all cells).
             drop_out = (float):    Drop out rate for RNN cell (common values for now)
@@ -70,13 +71,13 @@ class AttentionQA(object):
         # run bi-directional rnn to "contexualize" input questions
         with tf.variable_scope('q_contexualize'):
             if n_layers > 1:
-                q_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
-                q_cell_b = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                q_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                q_cell_b = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
 
             else:
-                q_cell_f = cell(n_units, activation=tf.nn.relu)
+                q_cell_f = cell(n_units, activation=activation)
                 q_cell_f = tf.contrib.rnn.DropoutWrapper(q_cell_f, output_keep_prob=1.0-drop_out)
-                q_cell_b = cell(n_units, activation=tf.nn.relu)
+                q_cell_b = cell(n_units, activation=activation)
                 q_cell_b = tf.contrib.rnn.DropoutWrapper(q_cell_b, output_keep_prob=1.0-drop_out)
             q_contex, self.q_states = tf.nn.bidirectional_dynamic_rnn(q_cell_f,q_cell_b, self.question_embeds,
                                                     sequence_length=self.question_lengths, dtype=tf.float32)
@@ -87,12 +88,12 @@ class AttentionQA(object):
         # run bi-directional rnn to "contexualize" input paragraphs
         with tf.variable_scope('p_contexualize'):
             if n_layers > 1:
-                p_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
-                p_cell_b = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                p_cell_f = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                p_cell_b = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
             else:
-                p_cell_f = cell(n_units, activation=tf.nn.relu)
+                p_cell_f = cell(n_units, activation=activation)
                 p_cell_f = tf.contrib.rnn.DropoutWrapper(p_cell_f, output_keep_prob=1.0-drop_out)
-                p_cell_b = cell(n_units, activation=tf.nn.relu)
+                p_cell_b = cell(n_units, activation=activation)
                 p_cell_b = tf.contrib.rnn.DropoutWrapper(p_cell_b, output_keep_prob=1.0-drop_out)
             # conditional encoding by feeding the last state of question encoding
             # p_contex, states = tf.nn.bidirectional_dynamic_rnn(p_cell_f, p_cell_b, self.input_embeds, self.input_lengths,
@@ -109,9 +110,9 @@ class AttentionQA(object):
             memory_sequence_length=self.question_lengths,dtype=tf.float32)
             # create an RNN over passage
             if n_layers > 1:
-                qa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                qa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
             else:
-                qa_cell = cell(n_units, activation=tf.nn.relu)
+                qa_cell = cell(n_units, activation=activation)
                 qa_cell = tf.contrib.rnn.DropoutWrapper(qa_cell, output_keep_prob=1.0-drop_out)
             # for each input to the next RNN cell, wire the attention mechanism
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(qa_cell, attention, alignment_history=True)
@@ -133,9 +134,9 @@ class AttentionQA(object):
             memory_sequence_length=self.question_lengths,dtype=tf.float32)
             # create an RNN over passage
             if n_layers > 1:
-                qa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                qa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
             else:
-                qa_cell = cell(n_units, activation=tf.nn.relu)
+                qa_cell = cell(n_units, activation=activation)
                 qa_cell = tf.contrib.rnn.DropoutWrapper(qa_cell, output_keep_prob=1.0-drop_out)
             # for each input to the next RNN cell, wire the attention mechanism
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(qa_cell, attention, alignment_history=True)
@@ -156,9 +157,9 @@ class AttentionQA(object):
             memory_sequence_length=self.question_lengths,dtype=tf.float32)
             # create an RNN over passage
             if n_layers > 1:
-                hqa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                hqa_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
             else:
-                hqa_cell = cell(n_units, activation=tf.nn.relu)
+                hqa_cell = cell(n_units, activation=activation)
                 hqa_cell = tf.contrib.rnn.DropoutWrapper(hqa_cell, output_keep_prob=1.0-drop_out)
             # for each input to the next RNN cell, wire the attention mechanism
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(hqa_cell, attention, alignment_history=True)
@@ -179,9 +180,9 @@ class AttentionQA(object):
             memory_sequence_length=self.input_lengths,dtype=tf.float32)
             # # create an RNN over passage
             if n_layers > 1:
-                pp_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=tf.nn.relu), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
+                pp_cell = tf.contrib.rnn.MultiRNNCell([tf.contrib.rnn.DropoutWrapper(cell(n_units, activation=activation), output_keep_prob=1.0-drop_out) for _ in range(n_layers)])
             else:
-                pp_cell = cell(n_units, activation=tf.nn.relu)
+                pp_cell = cell(n_units, activation=activation)
                 pp_cell = tf.contrib.rnn.DropoutWrapper(pp_cell, output_keep_prob=1.0-drop_out)
             # for each input to the next RNN cell, wire the attention mechanism
             attention_cell = tf.contrib.seq2seq.AttentionWrapper(pp_cell, attention, alignment_history=True)
