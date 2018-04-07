@@ -31,6 +31,9 @@ def train(args):
     # initialize graph
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter(args.log_dir + '/train', sess.graph)
+        test_writer = tf.summary.FileWriter(args.log_dir + '/val')
         sess.run(init)
         # saver.restore(sess, os.path.join(args.save_dir, '201804030240','ptr_net.ckpt'))
         # saver.restore(sess, os.path.join(args.save_dir, '201804060454', 'ptr_net.ckpt'))
@@ -51,8 +54,13 @@ def train(args):
             train_losses.append(tr_loss / training.n_batches)
             train_accuracies.append(tr_acc / training.n_batches)
 
+            # tensorboard
+            summ = sess.run(merged, feed_dict=train_dict)
+            train_writer.add_summary(summ, ep)
+
             # check validation accuracy every 10 epochs
             if ep % 10 == 0:
+
                 val_acc = 0
                 for itr in range(validation.n_batches):
                     x_batch, x_lengths, q_batch, q_length, y_batch = validation.next_batch()
@@ -65,6 +73,10 @@ def train(args):
                 val_acc = val_acc / validation.n_batches
                 print('epoch {:3d}, loss={:.3f}'.format(ep, tr_loss / training.n_batches))
                 print('Train EM: {:.3f}, Validation EM: {:.3f}'.format(tr_acc / training.n_batches, val_acc))
+
+                summ = sess.run(merged, feed_dict=val_dict)
+                test_writer.add_summary(summ, ep)
+
                 # training.shuffle_batch()
                 # save model
                 if val_acc > best_val_acc:
@@ -84,6 +96,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./data', help='Directory in which data is stored.')
     parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
+    parser.add_argument('--log_dir', type=str, default='./logs', help='Where to save checkpoint models.')
     parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs to run.')
     parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
     parser.add_argument('--learning_rate', type=float, default=0.0005, help='Learning rate for Adam optimizer.')
